@@ -107,7 +107,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   if (HAL_OK != HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1)) SETUP_OK++;
   uint8_t ADC_READ_IN = 0;
-  uint8_t SPI_Rx_Buffer[1] = {0};
+  uint8_t SPI_Rx_Buffer[3] = {0b00000001, 0b10000000, 0x00};
+  uint8_t SPI_Tx_Buffer[3] = {0, 0, 0};
 
   /* USER CODE END 2 */
 
@@ -116,12 +117,15 @@ int main(void)
   while (1)
   {
 	  //Receive from SPI using standard HAL function
-	  HAL_SPI_Receive(&hspi1, SPI_Rx_Buffer, 1, 10);
-	  ADC_READ_IN = SPI_Rx_Buffer[0];
+	  HAL_SPI_TransmitReceive(&hspi1, SPI_Tx_Buffer, SPI_Rx_Buffer, 3, 10);
+	  ADC_READ_IN = (SPI_Rx_Buffer[1] << 7) | (SPI_Rx_Buffer[2] >> 1); //MSB format, with MSB in bit 16 and LSB in bit 23
+	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	   //Bitwise operations to obtain final answer
 	  // change pulse length as needed
 	  PULSE_TICKS = 2400 + ADC_READ_IN * 9 - ADC_READ_IN / 3; //ADC_READ_IN is converted to PWM motion via a 9.33 multiplier for its value
 	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  //PULSE_TICKS has range of 2400 - 4780, or 1ms to just under 2 ms
-	  //PWM controller controlled asynchronously to maintain accurate time for the sensitive-PWM motor
+	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  //Internal clock = 48 Mhz with prescaler of 1 and count period of 48000
+
+	  //PWM controller controlled asynchronously to maintain accurate time for the sensitive-PWM motor, see user code 0 section
 	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
