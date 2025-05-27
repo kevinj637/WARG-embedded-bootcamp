@@ -52,6 +52,8 @@ void HardFault_Handler(void);
 void SVC_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void);
+void TIM1_CC_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
@@ -61,5 +63,3 @@ void SysTick_Handler(void);
 #endif
 
 #endif /* __STM32F0xx_IT_H */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

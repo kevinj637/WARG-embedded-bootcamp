@@ -19,11 +19,15 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stm32f0xx_ll_tim.h"
+#include "stm32f0xx_hal_tim.h"
 
 /* USER CODE END Includes */
 
@@ -44,6 +48,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+uint32_t PULSE_TICKS = 2400; //2400-4800 restrictive
+
 
 /* USER CODE END PV */
 
@@ -55,17 +61,26 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) //found in TIM.C at 5741 as a weak rewritable function
+{
+  /* Prevent unused argument(s) compilation warning */
+  UNUSED(htim);
+  TIM1->CCR1 = PULSE_TICKS;
 
+  /* NOTE : This function should not be modified, when the callback is needed,
+            the HAL_TIM_PWM_PulseFinishedCallback could be implemented in the user file
+   */
+}
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
-  * @retval int
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
 
+  /* USER CODE BEGIN 1 */
+	uint8_t SETUP_OK = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -87,7 +102,12 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_SPI1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  if (HAL_OK != HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1)) SETUP_OK++;
+  uint8_t ADC_READ_IN = 0;
+  uint8_t SPI_Rx_Buffer[1] = {0};
 
   /* USER CODE END 2 */
 
@@ -95,10 +115,20 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  //Receive from SPI using standard HAL function
+	  HAL_SPI_Receive(&hspi1, SPI_Rx_Buffer, 1, 10);
+	  ADC_READ_IN = SPI_Rx_Buffer[0];
+	  // change pulse length as needed
+	  PULSE_TICKS = 2400 + ADC_READ_IN * 9 - ADC_READ_IN / 3; //ADC_READ_IN is converted to PWM motion via a 9.33 multiplier for its value
+	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  //PULSE_TICKS has range of 2400 - 4780, or 1ms to just under 2 ms
+	  //PWM controller controlled asynchronously to maintain accurate time for the sensitive-PWM motor
+	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
+
+  HAL_TIM_PWM_Stop_IT(&htim1, TIM_CHANNEL_1);
   /* USER CODE END 3 */
 }
 
@@ -122,6 +152,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -177,5 +208,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
