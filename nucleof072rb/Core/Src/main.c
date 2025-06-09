@@ -61,26 +61,17 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) //found in TIM.C at 5741 as a weak rewritable function
-{
-  /* Prevent unused argument(s) compilation warning */
-  UNUSED(htim);
-  TIM1->CCR1 = PULSE_TICKS;
 
-  /* NOTE : This function should not be modified, when the callback is needed,
-            the HAL_TIM_PWM_PulseFinishedCallback could be implemented in the user file
-   */
-}
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
+  * @retval int
   */
 int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	uint8_t SETUP_OK = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -105,9 +96,10 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  if (HAL_OK != HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1)) SETUP_OK++;
-  uint8_t ADC_READ_IN = 0;
-  uint8_t SPI_Rx_Buffer[3] = {0b00000001, 0b10000000, 0x00};
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); //Regular PWM start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET); //Set up CS to be high by default
+  uint16_t ADC_READ_IN = 0;
+  uint8_t SPI_Rx_Buffer[3] = {0x01, 0x80, 0x00};
   uint8_t SPI_Tx_Buffer[3] = {0, 0, 0};
 
   /* USER CODE END 2 */
@@ -117,22 +109,28 @@ int main(void)
   while (1)
   {
 	  //Receive from SPI using standard HAL function
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET); //Set up CS low for SPI CS activation of ADC chip
 	  HAL_SPI_TransmitReceive(&hspi1, SPI_Tx_Buffer, SPI_Rx_Buffer, 3, 10);
-	  ADC_READ_IN = (SPI_Rx_Buffer[1] << 7) | (SPI_Rx_Buffer[2] >> 1); //MSB format, with MSB in bit 16 and LSB in bit 23
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET); //Set up CS high to deactivate SPI CS activation
+	  //there are ten bits of data, two in the middle uint_8 and eight in the last u_int8
+	  ADC_READ_IN = (SPI_Rx_Buffer[1] << 8) & SPI_Rx_Buffer[2]; //MSB format, with MSB in bit 16 and LSB in bit 23
 	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	   //Bitwise operations to obtain final answer
 	  // change pulse length as needed
-	  PULSE_TICKS = 2400 + ADC_READ_IN * 9 - ADC_READ_IN / 3; //ADC_READ_IN is converted to PWM motion via a 9.33 multiplier for its value
-	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  //PULSE_TICKS has range of 2400 - 4780, or 1ms to just under 2 ms
-	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  //Internal clock = 48 Mhz with prescaler of 1 and count period of 48000
+	  //PULSE_TICKS has range 3000-6000, as total duty cycle is 60 000
+	  //48 000 000 / (prescaler of 16) / (counter period of 60 000) = 50
+	  //range of input 0-1024
+	  PULSE_TICKS = ADC_READ_IN * 3 - ADC_READ_IN / 14 + 3000; //rationale: (3 - 1/14) ~= 2.928
+	  	  	  	  	  	  	  	  	  	  	  	  	  	  	   //2.928 * 1024 provides range of 0 - 2999, which is desired
+	  //Function pulled from hal_tim.h to modify pulse rate
+	  __HAL_TIM_SET_COUNTER(&htim1, PULSE_TICKS);
 
-	  //PWM controller controlled asynchronously to maintain accurate time for the sensitive-PWM motor, see user code 0 section
 	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
 
-  HAL_TIM_PWM_Stop_IT(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
   /* USER CODE END 3 */
 }
 
