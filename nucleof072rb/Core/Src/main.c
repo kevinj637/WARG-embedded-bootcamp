@@ -48,7 +48,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint32_t PULSE_TICKS = 2400; //2400-4800 restrictive
+uint32_t PULSE_TICKS = 0; // initialization
 
 
 /* USER CODE END PV */
@@ -99,8 +99,10 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); //Regular PWM start
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET); //Set up CS to be high by default
   uint16_t ADC_READ_IN = 0;
-  uint8_t SPI_Rx_Buffer[3] = {0x01, 0x80, 0x00};
-  uint8_t SPI_Tx_Buffer[3] = {0, 0, 0};
+  uint8_t SPI_Tx_Buffer[3] = {0x01, 0x80, 0x00};
+  uint8_t SPI_Rx_Buffer[3] = {0, 0, 0};
+  uint16_t COUNTER_PERIOD = __HAL_TIM_GET_AUTORELOAD(&htim1);
+  uint32_t PULSE_TICKS = COUNTER_PERIOD / 20; // initialization
 
   /* USER CODE END 2 */
 
@@ -115,14 +117,19 @@ int main(void)
 	  //there are ten bits of data, two in the middle uint_8 and eight in the last u_int8
 	  ADC_READ_IN = (SPI_Rx_Buffer[1] << 8) & SPI_Rx_Buffer[2]; //MSB format, with MSB in bit 16 and LSB in bit 23
 	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	   //Bitwise operations to obtain final answer
+	  //MAX_SIZE of ADC_READ_IN by data sheet is 1024
+
 	  // change pulse length as needed
-	  //PULSE_TICKS has range 3000-6000, as total duty cycle is 60 000
-	  //48 000 000 / (prescaler of 16) / (counter period of 60 000) = 50
-	  //range of input 0-1024
-	  PULSE_TICKS = ADC_READ_IN * 3 - ADC_READ_IN / 14 + 3000; //rationale: (3 - 1/14) ~= 2.928
-	  	  	  	  	  	  	  	  	  	  	  	  	  	  	   //2.928 * 1024 provides range of 0 - 2999, which is desired
+	  //Set from 5- 10% based off of counter division time, which is retrieved via the auto_reload function
+	  //NOT really sure you can command a 5% pulse rate without forcing "magic numbers", as
+	  //at the end of the day the pulse variable IS a magic number
+	  //Eliminates the need for formula, it's a ratio from 0-1 based on the counter period
+	  //added on to the minimum base rate of 5%
+	  PULSE_TICKS = ((COUNTER_PERIOD / 1024) * ADC_READ_IN + COUNTER_PERIOD) / 20;
+
 	  //Function pulled from hal_tim.h to modify pulse rate
-	  __HAL_TIM_SET_COUNTER(&htim1, PULSE_TICKS);
+	  //Static type cast to help with comaptibility for board, which is 16-bit
+	  __HAL_TIM_SET_COUNTER(&htim1, (uint16_t)PULSE_TICKS);
 
 	  HAL_Delay(10);
     /* USER CODE END WHILE */
